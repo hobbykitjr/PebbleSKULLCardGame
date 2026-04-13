@@ -2,8 +2,8 @@
  * Skull — Bluffing card game for Pebble
  * Targets: emery (Time 2), gabbro (Round 2)
  *
- * 3-6 players. Each has 3 roses + 1 skull. Play cards face-down,
- * then bet on how many roses you can flip. Flip a skull = lose a card.
+ * 3-6 players. Each has 3 shields + 1 bomb. Play cards face-down,
+ * then bet on how many shields you can flip. Flip a bomb = lose a card.
  * Win 2 rounds to win the game.
  */
 
@@ -118,33 +118,37 @@ static void draw_token(GContext *ctx, int cx, int cy, int icon, bool lg) {
     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 }
 
-// Small rose icon
-static void draw_rose(GContext *ctx, int cx, int cy) {
+// Shield icon (FA U+F132) — safe card
+// UTF-8: \xEF\x84\xB2
+#define FA_SHIELD "\xEF\x84\xB2"
+// Bomb icon (FA U+F1E2) — danger card
+// UTF-8: \xEF\x87\xA2
+#define FA_BOMB "\xEF\x87\xA2"
+
+static void draw_shield(GContext *ctx, int cx, int cy, bool large) {
+  GFont f = large ? s_icon_font_20 : s_icon_font_14;
+  int sz = large ? 30 : 22;
   #ifdef PBL_COLOR
-  graphics_context_set_fill_color(ctx, GColorRed);
-  graphics_fill_circle(ctx, GPoint(cx, cy), 4);
-  graphics_context_set_fill_color(ctx, GColorFromHEX(0xFF5555));
-  graphics_fill_circle(ctx, GPoint(cx-1, cy-1), 2);
+  graphics_context_set_text_color(ctx, GColorGreen);
   #else
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_circle(ctx, GPoint(cx, cy), 4);
+  graphics_context_set_text_color(ctx, GColorWhite);
   #endif
+  if(f)
+    graphics_draw_text(ctx, FA_SHIELD, f, GRect(cx-sz/2, cy-sz/2, sz, sz),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 }
 
-// Small skull icon
-static void draw_skull_icon(GContext *ctx, int cx, int cy) {
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_circle(ctx, GPoint(cx, cy-1), 5);
-  graphics_fill_rect(ctx, GRect(cx-3, cy+2, 6, 3), 0, GCornerNone);
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_circle(ctx, GPoint(cx-2, cy-2), 1);
-  graphics_fill_circle(ctx, GPoint(cx+2, cy-2), 1);
+static void draw_bomb(GContext *ctx, int cx, int cy, bool large) {
+  GFont f = large ? s_icon_font_20 : s_icon_font_14;
+  int sz = large ? 30 : 22;
   #ifdef PBL_COLOR
-  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_text_color(ctx, GColorRed);
+  #else
+  graphics_context_set_text_color(ctx, GColorWhite);
   #endif
-  graphics_context_set_stroke_width(ctx, 1);
-  graphics_draw_line(ctx, GPoint(cx-2, cy+3), GPoint(cx+2, cy+3));
-  graphics_draw_line(ctx, GPoint(cx, cy+2), GPoint(cx, cy+4));
+  if(f)
+    graphics_draw_text(ctx, FA_BOMB, f, GRect(cx-sz/2, cy-sz/2, sz, sz),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 }
 
 // Card back (face-down)
@@ -314,12 +318,16 @@ static void draw_table(GContext *ctx, int w, int h, int top_y, int hl_idx,
           int si = j;
           if(p->stack[si] == CARD_ROSE) {
             #ifdef PBL_COLOR
-            graphics_context_set_fill_color(ctx, GColorRed);
+            graphics_context_set_fill_color(ctx, GColorGreen);
             #else
             graphics_context_set_fill_color(ctx, GColorWhite);
             #endif
           } else {
+            #ifdef PBL_COLOR
+            graphics_context_set_fill_color(ctx, GColorRed);
+            #else
             graphics_context_set_fill_color(ctx, GColorWhite);
+            #endif
           }
           graphics_fill_rect(ctx, GRect(card_x, cards_y, 7, 10), 1, GCornersAll);
         }
@@ -367,7 +375,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       GRect(0, h*8/100, w, 34),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
-    draw_skull_icon(ctx, w/2, h*8/100 + 50);
+    draw_bomb(ctx, w/2, h*8/100 + 50, true);
 
     const char *opts[] = {"3 Players","4 Players","5 Players","6 Players"};
     int cy = h * 50 / 100;
@@ -459,9 +467,9 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     int hy = iy + 24;
     graphics_context_set_text_color(ctx, GColorWhite);
     char hand[24];
-    snprintf(hand, sizeof(hand), "%d rose%s%s",
+    snprintf(hand, sizeof(hand), "%d shield%s%s",
       p->hand_roses, p->hand_roses != 1 ? "s" : "",
-      p->hand_skull ? " + skull" : "");
+      p->hand_skull ? " + bomb" : "");
     graphics_draw_text(ctx, hand, f_sm,
       GRect(0, hy, w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
@@ -480,13 +488,13 @@ static void canvas_proc(Layer *l, GContext *ctx) {
         #endif
       }
       int icon_x = w/2 - 30;
-      draw_rose(ctx, icon_x, oy + 12);
+      draw_shield(ctx, icon_x, oy + 12, false);
       #ifdef PBL_COLOR
       graphics_context_set_text_color(ctx, sel ? GColorYellow : GColorWhite);
       #else
       graphics_context_set_text_color(ctx, sel ? GColorWhite : GColorLightGray);
       #endif
-      graphics_draw_text(ctx, "Play Rose", f_md,
+      graphics_draw_text(ctx, "Play Shield", f_md,
         GRect(icon_x + 10, oy + 1, w/2, 22),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
       oy += 28;
@@ -502,13 +510,13 @@ static void canvas_proc(Layer *l, GContext *ctx) {
         #endif
       }
       int icon_x = w/2 - 30;
-      draw_skull_icon(ctx, icon_x, oy + 12);
+      draw_bomb(ctx, icon_x, oy + 12, false);
       #ifdef PBL_COLOR
       graphics_context_set_text_color(ctx, sel ? GColorYellow : GColorWhite);
       #else
       graphics_context_set_text_color(ctx, sel ? GColorWhite : GColorLightGray);
       #endif
-      graphics_draw_text(ctx, "Play Skull", f_md,
+      graphics_draw_text(ctx, "Play Bomb", f_md,
         GRect(icon_x + 10, oy + 1, w/2, 22),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
       oy += 28;
@@ -636,7 +644,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     draw_token(ctx, w/2, iy, s_players[pi].icon, true);
     graphics_context_set_text_color(ctx, GColorWhite);
     char info[24];
-    snprintf(info, sizeof(info), "Revealing... %d/%d", s_roses_found, s_current_bet);
+    snprintf(info, sizeof(info), "Shields: %d/%d", s_roses_found, s_current_bet);
     graphics_draw_text(ctx, info, f_sm,
       GRect(0, iy + 20, w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
@@ -660,7 +668,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     graphics_context_set_text_color(ctx, GColorWhite);
     #endif
     char info[24];
-    snprintf(info, sizeof(info), "Roses: %d / %d", s_roses_found, s_current_bet);
+    snprintf(info, sizeof(info), "Shields: %d / %d", s_roses_found, s_current_bet);
     graphics_draw_text(ctx, info, f_md,
       GRect(0, by, w, 22),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
@@ -675,23 +683,23 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     int cy = h/2 - 30;
     draw_token(ctx, w/2, cy - 10, s_players[s_reveal_target].icon, true);
     if(s_flip_card == CARD_ROSE) {
-      draw_rose(ctx, w/2, cy + 30);
+      draw_shield(ctx, w/2, cy + 30, true);
       #ifdef PBL_COLOR
       graphics_context_set_text_color(ctx, GColorGreen);
       #else
       graphics_context_set_text_color(ctx, GColorWhite);
       #endif
-      graphics_draw_text(ctx, "Rose!", f_lg,
-        GRect(0, cy + 44, w, 34),
+      graphics_draw_text(ctx, "Shield!", f_lg,
+        GRect(0, cy + 48, w, 34),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     } else {
-      draw_skull_icon(ctx, w/2, cy + 30);
+      draw_bomb(ctx, w/2, cy + 30, true);
       #ifdef PBL_COLOR
       graphics_context_set_text_color(ctx, GColorRed);
       #else
       graphics_context_set_text_color(ctx, GColorWhite);
       #endif
-      graphics_draw_text(ctx, "SKULL!", f_lg,
+      graphics_draw_text(ctx, "BOMB!", f_lg,
         GRect(0, cy + 44, w, 34),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     }
@@ -704,13 +712,13 @@ static void canvas_proc(Layer *l, GContext *ctx) {
   // ======== SKULL FOUND ========
   else if(s_state == ST_SKULL) {
     int cy = h/2 - 40;
-    draw_skull_icon(ctx, w/2, cy);
+    draw_bomb(ctx, w/2, cy, true);
     #ifdef PBL_COLOR
     graphics_context_set_text_color(ctx, GColorRed);
     #else
     graphics_context_set_text_color(ctx, GColorWhite);
     #endif
-    graphics_draw_text(ctx, "SKULL!", f_lg,
+    graphics_draw_text(ctx, "BOMB!", f_lg,
       GRect(0, cy + 16, w, 34),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     graphics_context_set_text_color(ctx, GColorWhite);
