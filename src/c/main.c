@@ -70,6 +70,7 @@ static int  s_bettor_idx;        // index into s_order
 static bool s_bet_passed[MAX_PLAYERS];
 static int  s_bet_pick;          // number currently selected in bet UI
 static bool s_is_first_bettor;   // first person to bet (no pass option)
+static bool s_bet_choosing_num;  // true = picking number, false = pass/raise choice
 
 // Reveal tracking
 static int  s_roses_found;
@@ -242,66 +243,63 @@ static void lose_random_card(int pi) {
 }
 
 // ============================================================================
-// TABLE DRAWING
+// TABLE DRAWING — horizontal row showing play order
 // ============================================================================
 static void draw_table(GContext *ctx, int w, int h, int top_y, int hl_idx,
                        bool show_cursor) {
   GFont f_sm = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  int pad = PBL_IF_ROUND_ELSE(18, 4);
-  int lx = PBL_IF_ROUND_ELSE(pad + 14, pad + 4);
-  int cols = 2;
-  int rows = (s_num_players + 1) / 2;
-  int cell_w = (w - lx * 2) / cols;
-  int cell_h = 32;
+  // Each player slot: icon + cards below
+  int slot_w = w / s_num_players;
+  int icon_y = top_y + 12;
+  int cards_y = top_y + 28;
 
   for(int i = 0; i < s_num_players; i++) {
     int pi = s_order[i];
     Player *p = &s_players[pi];
-    int col = i % cols, row = i / cols;
-    int cx = lx + col * cell_w + 16;
-    int cy = top_y + row * cell_h + cell_h / 2;
+    int cx = i * slot_w + slot_w / 2;
 
-    // Highlight
+    // Highlight cursor
     if(show_cursor && i == hl_idx) {
       #ifdef PBL_COLOR
       graphics_context_set_fill_color(ctx, GColorFromHEX(0x002200));
-      graphics_fill_rect(ctx, GRect(lx + col * cell_w, cy - cell_h/2 + 1,
-        cell_w, cell_h - 2), 4, GCornersAll);
+      graphics_fill_rect(ctx, GRect(i * slot_w + 2, top_y,
+        slot_w - 4, 50), 4, GCornersAll);
       #endif
     }
 
     if(p->eliminated) {
-      draw_token(ctx, cx, cy, p->icon, false);
+      draw_token(ctx, cx, icon_y, p->icon, false);
       graphics_context_set_text_color(ctx, GColorDarkGray);
-      graphics_draw_text(ctx, "OUT", f_sm,
-        GRect(cx + 12, cy - 8, 40, 16),
-        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      graphics_draw_text(ctx, "X", f_sm,
+        GRect(cx - 6, cards_y, 12, 14),
+        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
       continue;
     }
 
-    draw_token(ctx, cx, cy, p->icon, false);
+    draw_token(ctx, cx, icon_y, p->icon, false);
 
-    // Point marker
+    // Point marker (small yellow dot above icon)
     if(p->points > 0) {
       #ifdef PBL_COLOR
       graphics_context_set_fill_color(ctx, GColorYellow);
-      graphics_fill_circle(ctx, GPoint(cx + 10, cy - 8), 3);
+      graphics_fill_circle(ctx, GPoint(cx + 8, icon_y - 8), 3);
       #endif
     }
 
-    // Card count + stack
+    // Card count below icon
     if(p->stack_count > 0) {
-      char cnt[4]; snprintf(cnt, sizeof(cnt), "%d", p->stack_count);
-      graphics_context_set_text_color(ctx, GColorWhite);
-      graphics_draw_text(ctx, cnt, f_sm,
-        GRect(cx + 12, cy - 9, 14, 16),
-        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-
-      int sx = cx + 26;
+      // Show small card backs stacked
+      int stack_w = p->stack_count * 6;
+      int sx = cx - stack_w / 2;
       for(int j = 0; j < p->stack_count; j++) {
-        int card_x = sx + j * 8;
+        int card_x = sx + j * 6;
         if(j < p->stack_count - p->revealed) {
-          draw_card_back(ctx, card_x, cy, false);
+          #ifdef PBL_COLOR
+          graphics_context_set_fill_color(ctx, GColorFromHEX(0x333333));
+          #else
+          graphics_context_set_fill_color(ctx, GColorDarkGray);
+          #endif
+          graphics_fill_rect(ctx, GRect(card_x, cards_y, 7, 10), 1, GCornersAll);
         } else {
           int si = j;
           if(p->stack[si] == CARD_ROSE) {
@@ -310,19 +308,23 @@ static void draw_table(GContext *ctx, int w, int h, int top_y, int hl_idx,
             #else
             graphics_context_set_fill_color(ctx, GColorWhite);
             #endif
-            graphics_fill_rect(ctx, GRect(card_x, cy-7, 10, 14), 2, GCornersAll);
           } else {
             graphics_context_set_fill_color(ctx, GColorWhite);
-            graphics_fill_rect(ctx, GRect(card_x, cy-7, 10, 14), 2, GCornersAll);
-            graphics_context_set_fill_color(ctx, GColorBlack);
-            graphics_fill_circle(ctx, GPoint(card_x+3, cy-2), 1);
-            graphics_fill_circle(ctx, GPoint(card_x+7, cy-2), 1);
           }
+          graphics_fill_rect(ctx, GRect(card_x, cards_y, 7, 10), 1, GCornersAll);
         }
       }
+      // Count number
+      char cnt[4]; snprintf(cnt, sizeof(cnt), "%d", p->stack_count);
+      graphics_context_set_text_color(ctx, GColorWhite);
+      graphics_draw_text(ctx, cnt, f_sm,
+        GRect(cx - 6, cards_y + 10, 12, 14),
+        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     }
   }
 }
+// Table height for layout calculations
+static int table_height(void) { return 56; }
 
 // ============================================================================
 // CANVAS
@@ -359,6 +361,18 @@ static void canvas_proc(Layer *l, GContext *ctx) {
 
     const char *opts[] = {"3 Players","4 Players","5 Players","6 Players"};
     int cy = h * 50 / 100;
+
+    // Arrows
+    graphics_context_set_text_color(ctx, GColorLightGray);
+    if(s_icon_font_20) {
+      graphics_draw_text(ctx, "\xEF\x83\x98", s_icon_font_20,
+        GRect(w/2-15, cy-26, 30, 26),
+        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      graphics_draw_text(ctx, "\xEF\x83\x97", s_icon_font_20,
+        GRect(w/2-15, cy+32, 30, 26),
+        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+    }
+
     #ifdef PBL_COLOR
     graphics_context_set_fill_color(ctx, GColorFromHEX(0x330011));
     #else
@@ -514,80 +528,94 @@ static void canvas_proc(Layer *l, GContext *ctx) {
   // ======== BET ========
   else if(s_state == ST_BET) {
     int pi = cp();
-    // Table at top
+    // Table row at top
     int ty = PBL_IF_ROUND_ELSE(28, 8);
     draw_table(ctx, w, h, ty, s_cur_idx, false);
 
-    int tbl_rows = (s_num_players + 1) / 2;
-    int by = ty + tbl_rows * 32 + 4;
-
-    // Whose turn
-    draw_token(ctx, w/2, by + 10, s_players[pi].icon, false);
-
-    int oy = by + 24;
+    int by = ty + table_height() + 2;
     int max_bet = total_on_table();
 
-    if(s_is_first_bettor) {
-      // First bettor: pick a number (1 to max), no pass
+    // Current bet info + who placed it
+    if(s_current_bet > 0) {
+      char bet_info[32];
+      snprintf(bet_info, sizeof(bet_info), "Bet: %d by", s_current_bet);
+      graphics_context_set_text_color(ctx, GColorWhite);
+      graphics_draw_text(ctx, bet_info, f_sm,
+        GRect(0, by, w/2 + 20, 16),
+        GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      draw_token(ctx, w/2 + 30, by + 8, s_players[s_order[s_bettor_idx]].icon, false);
+      by += 18;
+    }
+
+    // Whose turn
+    draw_token(ctx, w/2 - 40, by + 12, s_players[pi].icon, false);
+    #ifdef PBL_COLOR
+    graphics_context_set_text_color(ctx, tok_color(s_players[pi].icon));
+    #else
+    graphics_context_set_text_color(ctx, GColorWhite);
+    #endif
+    graphics_draw_text(ctx, s_tok_name[s_players[pi].icon], f_sm,
+      GRect(w/2 - 24, by + 4, 80, 16),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    by += 22;
+
+    if(s_is_first_bettor || s_bet_choosing_num) {
+      // Number picker with arrows
       #ifdef PBL_COLOR
       graphics_context_set_text_color(ctx, GColorYellow);
       #else
       graphics_context_set_text_color(ctx, GColorWhite);
       #endif
-      char pick_str[20];
-      snprintf(pick_str, sizeof(pick_str), "Bet: %d", s_bet_pick);
+      // Up arrow
+      if(s_icon_font_14 && s_bet_pick < max_bet)
+        graphics_draw_text(ctx, "\xEF\x83\x98", s_icon_font_14,
+          GRect(w/2-8, by-2, 16, 16),
+          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      char pick_str[8]; snprintf(pick_str, sizeof(pick_str), "%d", s_bet_pick);
       graphics_draw_text(ctx, pick_str, f_lg,
-        GRect(0, oy, w, 34),
+        GRect(0, by + 12, w, 34),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      // Down arrow
+      int min_bet = s_is_first_bettor ? 1 : s_current_bet + 1;
+      if(s_icon_font_14 && s_bet_pick > min_bet)
+        graphics_draw_text(ctx, "\xEF\x83\x97", s_icon_font_14,
+          GRect(w/2-8, by + 44, 16, 16),
+          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+
       graphics_context_set_text_color(ctx, GColorLightGray);
-      char range[20];
-      snprintf(range, sizeof(range), "UP/DOWN: 1-%d", max_bet);
-      graphics_draw_text(ctx, range, f_sm,
-        GRect(0, oy + 32, w, 16),
+      const char *hint = s_is_first_bettor ? "SELECT to bet" : "SELECT to raise  BACK to cancel";
+      graphics_draw_text(ctx, hint, f_sm,
+        GRect(0, h - PBL_IF_ROUND_ELSE(28, 18), w, 16),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     } else {
-      // Subsequent bettor: current bet shown, pick higher or pass
-      graphics_context_set_text_color(ctx, GColorLightGray);
-      char cur[16]; snprintf(cur, sizeof(cur), "Current: %d", s_current_bet);
-      graphics_draw_text(ctx, cur, f_sm,
-        GRect(0, oy, w, 16),
+      // Pass / Raise choice
+      int oy = by + 4;
+      bool sel_pass = (s_cursor == 0);
+      bool sel_raise = (s_cursor == 1);
+
+      // Pass button
+      #ifdef PBL_COLOR
+      graphics_context_set_fill_color(ctx, sel_pass ? GColorFromHEX(0x330000) : GColorFromHEX(0x110011));
+      graphics_fill_rect(ctx, GRect(w/2-50, oy, 100, 24), 4, GCornersAll);
+      graphics_context_set_text_color(ctx, sel_pass ? GColorYellow : GColorLightGray);
+      #else
+      graphics_context_set_text_color(ctx, sel_pass ? GColorWhite : GColorLightGray);
+      #endif
+      graphics_draw_text(ctx, "Pass", sel_pass ? f_md : f_sm,
+        GRect(w/2-50, oy + 2, 100, 22),
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
-      if(s_cursor == 0) {
-        // Raise selected
-        #ifdef PBL_COLOR
-        graphics_context_set_text_color(ctx, GColorYellow);
-        #else
-        graphics_context_set_text_color(ctx, GColorWhite);
-        #endif
-        char pick_str[20];
-        snprintf(pick_str, sizeof(pick_str), "> Bet: %d", s_bet_pick);
-        graphics_draw_text(ctx, pick_str, f_md,
-          GRect(0, oy + 18, w, 22),
-          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-        #ifdef PBL_COLOR
-        graphics_context_set_text_color(ctx, GColorLightGray);
-        #endif
-        graphics_draw_text(ctx, "  Pass", f_sm,
-          GRect(0, oy + 40, w, 18),
-          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-      } else {
-        // Pass selected
-        graphics_context_set_text_color(ctx, GColorLightGray);
-        char pick_str[20];
-        snprintf(pick_str, sizeof(pick_str), "  Bet: %d", s_bet_pick);
-        graphics_draw_text(ctx, pick_str, f_sm,
-          GRect(0, oy + 18, w, 18),
-          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-        #ifdef PBL_COLOR
-        graphics_context_set_text_color(ctx, GColorYellow);
-        #else
-        graphics_context_set_text_color(ctx, GColorWhite);
-        #endif
-        graphics_draw_text(ctx, "> Pass", f_md,
-          GRect(0, oy + 38, w, 22),
-          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-      }
+      // Raise button
+      #ifdef PBL_COLOR
+      graphics_context_set_fill_color(ctx, sel_raise ? GColorFromHEX(0x003300) : GColorFromHEX(0x110011));
+      graphics_fill_rect(ctx, GRect(w/2-50, oy + 28, 100, 24), 4, GCornersAll);
+      graphics_context_set_text_color(ctx, sel_raise ? GColorYellow : GColorLightGray);
+      #else
+      graphics_context_set_text_color(ctx, sel_raise ? GColorWhite : GColorLightGray);
+      #endif
+      graphics_draw_text(ctx, "Raise Bet", sel_raise ? f_md : f_sm,
+        GRect(w/2-50, oy + 30, 100, 22),
+        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     }
   }
 
@@ -615,8 +643,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     int ty = PBL_IF_ROUND_ELSE(28, 8);
     draw_table(ctx, w, h, ty, s_cursor, true);
 
-    int rows = (s_num_players + 1) / 2;
-    int by = ty + rows * 32 + 4;
+    int by = ty + table_height() + 4;
     #ifdef PBL_COLOR
     graphics_context_set_text_color(ctx, GColorYellow);
     #else
@@ -794,6 +821,7 @@ static void select_click(ClickRecognizerRef ref, void *ctx) {
       s_current_bet = 0;
       s_bettor_idx = s_cur_idx;
       s_is_first_bettor = true;
+      s_bet_choosing_num = false;
       s_in_bet_phase = true;
       s_bet_pick = 1;
       for(int i = 0; i < MAX_PLAYERS; i++) s_bet_passed[i] = false;
@@ -822,6 +850,7 @@ static void select_click(ClickRecognizerRef ref, void *ctx) {
       s_current_bet = 0;
       s_bettor_idx = s_cur_idx;
       s_is_first_bettor = true;
+      s_bet_choosing_num = false;
       s_in_bet_phase = true;
       s_bet_pick = 1;
       for(int i = 0; i < MAX_PLAYERS; i++) s_bet_passed[i] = false;
@@ -839,21 +868,29 @@ static void select_click(ClickRecognizerRef ref, void *ctx) {
   }
   else if(s_state == ST_BET) {
     bool did_bet = false;
+
     if(s_is_first_bettor) {
-      // First bettor confirms their pick
+      // First bettor confirms number
       s_current_bet = s_bet_pick;
       s_bettor_idx = s_cur_idx;
       s_is_first_bettor = false;
       did_bet = true;
-    } else if(s_cursor == 0) {
-      // Raise to s_bet_pick
+    } else if(s_bet_choosing_num) {
+      // Confirmed raise
       s_current_bet = s_bet_pick;
       s_bettor_idx = s_cur_idx;
+      s_bet_choosing_num = false;
       for(int i = 0; i < MAX_PLAYERS; i++) s_bet_passed[i] = false;
       did_bet = true;
-    } else {
+    } else if(s_cursor == 0) {
       // Pass
       s_bet_passed[s_cur_idx] = true;
+    } else {
+      // Raise — enter number picker
+      s_bet_choosing_num = true;
+      s_bet_pick = s_current_bet + 1;
+      if(s_canvas) layer_mark_dirty(s_canvas);
+      return;
     }
 
     // Check if bet maxed out
@@ -879,9 +916,10 @@ static void select_click(ClickRecognizerRef ref, void *ctx) {
       s_state = (bp->stack_count > 0) ? ST_REVEAL_OWN : ST_REVEAL_PICK;
       s_cursor = 0;
     } else {
-      // Set up next player's bet UI
+      // Next player: default to Pass
       s_bet_pick = s_current_bet + 1;
-      s_cursor = 1; // default to Pass
+      s_bet_choosing_num = false;
+      s_cursor = 0; // Pass selected by default
     }
   }
   else if(s_state == ST_REVEAL_OWN) {
@@ -982,16 +1020,12 @@ static void up_click(ClickRecognizerRef ref, void *ctx) {
     s_cursor = (s_cursor + max - 1) % max;
   } else if(s_state == ST_BET) {
     int max_bet = total_on_table();
-    if(s_is_first_bettor) {
-      // Number picker only
-      if(s_bet_pick > 1) s_bet_pick--;
-    } else if(s_cursor == 0) {
-      // On bet: decrease number or switch to pass
-      if(s_bet_pick > s_current_bet + 1) s_bet_pick--;
-      else s_cursor = 1; // switch to pass
+    if(s_is_first_bettor || s_bet_choosing_num) {
+      // Number picker: UP = increase
+      if(s_bet_pick < max_bet) s_bet_pick++;
     } else {
-      // On pass: switch to bet
-      s_cursor = 0;
+      // Pass/Raise choice
+      s_cursor = (s_cursor + 1) % 2;
     }
   } else if(s_state == ST_REVEAL_PICK) {
     int start = s_cursor;
@@ -1012,15 +1046,12 @@ static void down_click(ClickRecognizerRef ref, void *ctx) {
     int max = play_option_count();
     s_cursor = (s_cursor + 1) % max;
   } else if(s_state == ST_BET) {
-    int max_bet = total_on_table();
-    if(s_is_first_bettor) {
-      if(s_bet_pick < max_bet) s_bet_pick++;
-    } else if(s_cursor == 0) {
-      // On bet: increase number
-      if(s_bet_pick < max_bet) s_bet_pick++;
+    int min_bet = s_is_first_bettor ? 1 : s_current_bet + 1;
+    if(s_is_first_bettor || s_bet_choosing_num) {
+      // Number picker: DOWN = decrease
+      if(s_bet_pick > min_bet) s_bet_pick--;
     } else {
-      // On pass: switch to bet
-      s_cursor = 0;
+      s_cursor = (s_cursor + 1) % 2;
     }
   } else if(s_state == ST_REVEAL_PICK) {
     int start = s_cursor;
@@ -1035,6 +1066,13 @@ static void down_click(ClickRecognizerRef ref, void *ctx) {
 }
 
 static void back_click(ClickRecognizerRef ref, void *ctx) {
+  if(s_state == ST_BET && s_bet_choosing_num && !s_is_first_bettor) {
+    // Back from number picker to Pass/Raise choice
+    s_bet_choosing_num = false;
+    s_cursor = 0;
+    if(s_canvas) layer_mark_dirty(s_canvas);
+    return;
+  }
   if(s_state == ST_SETUP || s_state == ST_GAMEOVER)
     window_stack_pop(true);
   else {
