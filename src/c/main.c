@@ -258,12 +258,20 @@ static void draw_table(GContext *ctx, int w, int h, int top_y, int hl_idx,
     Player *p = &s_players[pi];
     int cx = i * slot_w + slot_w / 2;
 
-    // Highlight cursor
+    // Highlight cursor — bright border around selected player
     if(show_cursor && i == hl_idx) {
       #ifdef PBL_COLOR
-      graphics_context_set_fill_color(ctx, GColorFromHEX(0x002200));
-      graphics_fill_rect(ctx, GRect(i * slot_w + 2, top_y,
-        slot_w - 4, 50), 4, GCornersAll);
+      graphics_context_set_fill_color(ctx, GColorFromHEX(0x004400));
+      graphics_fill_rect(ctx, GRect(i * slot_w + 1, top_y,
+        slot_w - 2, 52), 4, GCornersAll);
+      graphics_context_set_stroke_color(ctx, GColorYellow);
+      graphics_context_set_stroke_width(ctx, 2);
+      graphics_draw_round_rect(ctx, GRect(i * slot_w + 1, top_y,
+        slot_w - 2, 52), 4);
+      #else
+      graphics_context_set_fill_color(ctx, GColorDarkGray);
+      graphics_fill_rect(ctx, GRect(i * slot_w + 1, top_y,
+        slot_w - 2, 52), 4, GCornersAll);
       #endif
     }
 
