@@ -1024,7 +1024,7 @@ static void select_click(ClickRecognizerRef ref, void *ctx) {
 
 static void up_click(ClickRecognizerRef ref, void *ctx) {
   if(s_state == ST_SETUP) {
-    s_setup_cursor = (s_setup_cursor + 3) % 4;
+    s_setup_cursor = (s_setup_cursor + 1) % 4;
   } else if(s_state == ST_PLAY) {
     int max = play_option_count();
     s_cursor = (s_cursor + max - 1) % max;
@@ -1051,7 +1051,7 @@ static void up_click(ClickRecognizerRef ref, void *ctx) {
 
 static void down_click(ClickRecognizerRef ref, void *ctx) {
   if(s_state == ST_SETUP) {
-    s_setup_cursor = (s_setup_cursor + 1) % 4;
+    s_setup_cursor = (s_setup_cursor + 3) % 4;
   } else if(s_state == ST_PLAY) {
     int max = play_option_count();
     s_cursor = (s_cursor + 1) % max;
