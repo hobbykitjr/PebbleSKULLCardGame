@@ -248,29 +248,31 @@ static void lose_random_card(int pi) {
 static void draw_table(GContext *ctx, int w, int h, int top_y, int hl_idx,
                        bool show_cursor) {
   GFont f_sm = fonts_get_system_font(FONT_KEY_GOTHIC_14);
-  // Each player slot: icon + cards below
-  int slot_w = w / s_num_players;
+  // Each player slot: icon + cards below, with padding for round screen
+  int tpad = PBL_IF_ROUND_ELSE(20, 4);
+  int usable_w = w - tpad * 2;
+  int slot_w = usable_w / s_num_players;
   int icon_y = top_y + 12;
   int cards_y = top_y + 28;
 
   for(int i = 0; i < s_num_players; i++) {
     int pi = s_order[i];
     Player *p = &s_players[pi];
-    int cx = i * slot_w + slot_w / 2;
+    int cx = tpad + i * slot_w + slot_w / 2;
 
     // Highlight cursor — bright border around selected player
     if(show_cursor && i == hl_idx) {
       #ifdef PBL_COLOR
       graphics_context_set_fill_color(ctx, GColorFromHEX(0x004400));
-      graphics_fill_rect(ctx, GRect(i * slot_w + 1, top_y,
+      graphics_fill_rect(ctx, GRect(tpad + i * slot_w + 1, top_y,
         slot_w - 2, 52), 4, GCornersAll);
       graphics_context_set_stroke_color(ctx, GColorYellow);
       graphics_context_set_stroke_width(ctx, 2);
-      graphics_draw_round_rect(ctx, GRect(i * slot_w + 1, top_y,
+      graphics_draw_round_rect(ctx, GRect(tpad + i * slot_w + 1, top_y,
         slot_w - 2, 52), 4);
       #else
       graphics_context_set_fill_color(ctx, GColorDarkGray);
-      graphics_fill_rect(ctx, GRect(i * slot_w + 1, top_y,
+      graphics_fill_rect(ctx, GRect(tpad + i * slot_w + 1, top_y,
         slot_w - 2, 52), 4, GCornersAll);
       #endif
     }
