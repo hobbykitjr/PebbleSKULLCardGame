@@ -539,7 +539,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
   else if(s_state == ST_BET) {
     int pi = cp();
     // Table row at top
-    int ty = PBL_IF_ROUND_ELSE(28, 8);
+    int ty = PBL_IF_ROUND_ELSE(44, 8);
     draw_table(ctx, w, h, ty, s_cur_idx, false);
 
     int by = ty + table_height() + 2;
@@ -650,7 +650,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
 
   // ======== REVEAL PICK ========
   else if(s_state == ST_REVEAL_PICK) {
-    int ty = PBL_IF_ROUND_ELSE(28, 8);
+    int ty = PBL_IF_ROUND_ELSE(44, 8);
     draw_table(ctx, w, h, ty, s_cursor, true);
 
     int by = ty + table_height() + 4;
