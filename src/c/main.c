@@ -601,10 +601,18 @@ static void canvas_proc(Layer *l, GContext *ctx) {
           GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
       graphics_context_set_text_color(ctx, GColorLightGray);
-      const char *hint = s_is_first_bettor ? "SELECT to bet" : "SELECT to raise  BACK to cancel";
-      graphics_draw_text(ctx, hint, f_sm,
-        GRect(0, h - PBL_IF_ROUND_ELSE(28, 18), w, 16),
-        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      if(s_is_first_bettor) {
+        graphics_draw_text(ctx, "SELECT to bet", f_sm,
+          GRect(0, h - PBL_IF_ROUND_ELSE(28, 18), w, 16),
+          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      } else {
+        graphics_draw_text(ctx, "SELECT to raise", f_sm,
+          GRect(0, h - PBL_IF_ROUND_ELSE(42, 32), w, 16),
+          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+        graphics_draw_text(ctx, "BACK to cancel", f_sm,
+          GRect(0, h - PBL_IF_ROUND_ELSE(28, 18), w, 16),
+          GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      }
     } else {
       // Pass / Raise choice
       int oy = by + 4;
