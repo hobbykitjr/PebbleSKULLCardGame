@@ -8,7 +8,9 @@
     "pebble": {
         "displayName": "Skull",
         "enableMultiJS": false,
-        "messageKeys": [],
+        "messageKeys": {
+            "TOUCH_MODE": 0
+        },
         "projectType": "native",
         "resources": {
             "media": [

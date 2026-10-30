@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skull Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #110011;
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .header { text-align: center; padding: 20px 0; }
+    .header h1 { font-size: 24px; color: #cc4444; }
+    .header p { color: #888; font-size: 14px; margin-top: 4px; }
+    .card {
+      background: #2a0020;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    .card h2 { font-size: 16px; color: #cc4444; margin-bottom: 12px; }
+    .hint { font-size: 12px; color: #666; margin-top: 8px; }
+    .btn {
+      display: block; width: 100%; padding: 14px; font-size: 16px;
+      font-weight: bold; border: none; border-radius: 8px; cursor: pointer; margin-top: 20px;
+    }
+    .btn-save { background: #cc4444; color: #110011; }
+    .btn-cancel { background: #333; color: #aaa; margin-top: 10px; }
+    .toggle-group {
+      display: flex; border-radius: 8px; overflow: hidden;
+      border: 1px solid #cc4444; margin-bottom: 4px;
+    }
+    .toggle-group label {
+      flex: 1; text-align: center; padding: 12px; font-size: 14px;
+      font-weight: bold; color: #aaa; background: #110011;
+      cursor: pointer; margin-bottom: 0;
+    }
+    .toggle-group input[type="radio"] { display: none; }
+    .toggle-group input[type="radio"]:checked + label {
+      background: #cc4444; color: #110011;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Skull</h1>
+    <p>Settings</p>
+  </div>
+
+  <div class="card">
+    <h2>Touch Mode</h2>
+    <div class="toggle-group">
+      <input type="radio" name="touchMode" id="touchDirect" value="1">
+      <label for="touchDirect">Tap Direct</label>
+      <input type="radio" name="touchMode" id="touchToggle" value="0">
+      <label for="touchToggle">Tap Toggle</label>
+    </div>
+    <p class="hint">Tap Direct: touch cards, buttons, and players directly.<br>
+       Tap Toggle: touch anywhere to activate cursor selection.</p>
+  </div>
+
+  <button class="btn btn-save" id="saveBtn">Save Settings</button>
+  <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
+
+  <script>
+    function getParam(name) {
+      var match = location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    var touchMode = getParam('touch') || '1';
+    document.getElementById(touchMode === '1' ? 'touchDirect' : 'touchToggle').checked = true;
+
+    var returnTo = getParam('return_to');
+
+    function returnResult(jsonString) {
+      var encoded = encodeURIComponent(jsonString);
+      if(returnTo) document.location = returnTo + 'response=' + encoded + '#' + encoded;
+      else document.location = 'pebblejs://close#' + encoded;
+    }
+    function returnCancel() {
+      if(returnTo) document.location = returnTo;
+      else document.location = 'pebblejs://close';
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', function() {
+      var sel = document.querySelector('input[name="touchMode"]:checked');
+      returnResult(JSON.stringify({ touchMode: sel ? sel.value : '1' }));
+    });
+    document.getElementById('cancelBtn').addEventListener('click', returnCancel);
+  </script>
+</body>
+</html>

@@ -78,6 +78,21 @@ static int  s_reveal_target;     // player being revealed
 static int  s_flip_card;         // card being shown (CARD_ROSE or CARD_SKULL)
 static int  s_skull_owner;       // who owned the skull
 
+// Touch support
+#define P_TOUCH_DIRECT 0
+static bool s_touch_direct = true;
+#define TAP_COOLDOWN_MS 200
+static uint32_t s_last_tap_time = 0;
+
+// Cached layout for touch hit-testing
+static GRect g_play_opt[3];   // play card option rects
+static int   g_play_opt_n;
+static GRect g_bet_pass, g_bet_raise;
+static bool  g_bet_btns_visible;
+static GRect g_table_slot[MAX_PLAYERS];
+static int   g_table_slot_n;
+static bool  g_table_visible;
+
 // ============================================================================
 // COLORS
 // ============================================================================
@@ -259,7 +274,9 @@ static void draw_table(GContext *ctx, int w, int h, int top_y, int hl_idx,
   int icon_y = top_y + 12;
   int cards_y = top_y + 28;
 
+  g_table_slot_n = s_num_players;
   for(int i = 0; i < s_num_players; i++) {
+    g_table_slot[i] = GRect(tpad + i * slot_w, top_y, slot_w, 52);
     int pi = s_order[i];
     Player *p = &s_players[pi];
     int cx = tpad + i * slot_w + slot_w / 2;
@@ -352,6 +369,10 @@ static void canvas_proc(Layer *l, GContext *ctx) {
   int w = b.size.w, h = b.size.h;
   int pad = PBL_IF_ROUND_ELSE(18, 4);
 
+  g_play_opt_n = 0;
+  g_bet_btns_visible = false;
+  g_table_visible = false;
+
   // Dark background
   #ifdef PBL_COLOR
   graphics_context_set_fill_color(ctx, GColorFromHEX(0x110011));
@@ -403,7 +424,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "SELECT to start", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT to start", f_sm,
       GRect(0, h*82/100, w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -427,7 +448,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       draw_token(ctx, cx, cyy, s_players[pi].icon, true);
     }
     graphics_context_set_text_color(ctx, GColorWhite);
-    graphics_draw_text(ctx, "SELECT to start", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT to start", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(26,18), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -450,7 +471,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       GRect(0, cy+46, w, 22),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "SELECT when ready", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT when ready", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(30,20), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -481,6 +502,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     // Play Rose
     if(p->hand_roses > 0) {
       bool sel = (s_cursor == opt);
+      g_play_opt[g_play_opt_n++] = GRect(pad+20, oy, w-pad*2-40, 24);
       if(sel) {
         #ifdef PBL_COLOR
         graphics_context_set_fill_color(ctx, GColorFromHEX(0x330000));
@@ -503,6 +525,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     // Play Skull
     if(p->hand_skull) {
       bool sel = (s_cursor == opt_count);
+      g_play_opt[g_play_opt_n++] = GRect(pad+20, oy, w-pad*2-40, 24);
       if(sel) {
         #ifdef PBL_COLOR
         graphics_context_set_fill_color(ctx, GColorFromHEX(0x330000));
@@ -525,6 +548,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     // Bet (available after everyone played 1, or forced if hand empty)
     if(s_all_played_one || player_hand_count(pi) == 0) {
       bool sel = (s_cursor == opt_count);
+      g_play_opt[g_play_opt_n++] = GRect(pad+20, oy, w-pad*2-40, 24);
       if(sel) {
         #ifdef PBL_COLOR
         graphics_context_set_fill_color(ctx, GColorFromHEX(0x003300));
@@ -602,11 +626,11 @@ static void canvas_proc(Layer *l, GContext *ctx) {
 
       graphics_context_set_text_color(ctx, GColorLightGray);
       if(s_is_first_bettor) {
-        graphics_draw_text(ctx, "SELECT to bet", f_sm,
+        graphics_draw_text(ctx, "TAP/SELECT to bet", f_sm,
           GRect(0, h - PBL_IF_ROUND_ELSE(28, 18), w, 16),
           GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
       } else {
-        graphics_draw_text(ctx, "SELECT to raise", f_sm,
+        graphics_draw_text(ctx, "TAP/SELECT to raise", f_sm,
           GRect(0, h - PBL_IF_ROUND_ELSE(42, 32), w, 16),
           GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
         graphics_draw_text(ctx, "BACK to cancel", f_sm,
@@ -618,6 +642,9 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       int oy = by + 4;
       bool sel_pass = (s_cursor == 0);
       bool sel_raise = (s_cursor == 1);
+      g_bet_pass = GRect(w/2-50, oy, 100, 24);
+      g_bet_raise = GRect(w/2-50, oy + 28, 100, 24);
+      g_bet_btns_visible = true;
 
       // Pass button
       #ifdef PBL_COLOR
@@ -659,7 +686,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     graphics_draw_text(ctx, "Your cards first!", f_md,
       GRect(0, iy + 40, w, 22),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-    graphics_draw_text(ctx, "SELECT to flip", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT to flip", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(28,18), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -668,6 +695,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
   else if(s_state == ST_REVEAL_PICK) {
     int ty = PBL_IF_ROUND_ELSE(44, 8);
     draw_table(ctx, w, h, ty, s_cursor, true);
+    g_table_visible = true;
 
     int by = ty + table_height() + 4;
     #ifdef PBL_COLOR
@@ -712,7 +740,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     }
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "SELECT", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(28,18), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -745,7 +773,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     }
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "SELECT: next round", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT: next round", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(28,18), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -771,7 +799,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       GRect(0, cy + 56, w, 22),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "SELECT", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(28,18), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -796,7 +824,7 @@ static void canvas_proc(Layer *l, GContext *ctx) {
       GRect(0, cy + 66, w, 22),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
     graphics_context_set_text_color(ctx, GColorLightGray);
-    graphics_draw_text(ctx, "SELECT: new game", f_sm,
+    graphics_draw_text(ctx, "TAP/SELECT: new game", f_sm,
       GRect(0, h-PBL_IF_ROUND_ELSE(28,18), w, 16),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
@@ -823,6 +851,86 @@ static int play_option_to_action(int opt) {
   if(p->hand_roses > 0) { if(opt == idx) return 0; idx++; }
   if(p->hand_skull) { if(opt == idx) return 1; idx++; }
   return 2; // bet
+}
+
+// Forward declaration
+static void select_click(ClickRecognizerRef ref, void *ctx);
+
+// ============================================================================
+// TOUCH HANDLER
+// ============================================================================
+#ifdef PBL_TOUCH
+static bool point_in_rect(int tx, int ty, GRect r) {
+  return tx >= r.origin.x && tx < r.origin.x + r.size.w &&
+         ty >= r.origin.y && ty < r.origin.y + r.size.h;
+}
+
+static void touch_handler(const TouchEvent *event, void *context) {
+  (void)context;
+  if(event->type != TouchEvent_Touchdown) return;
+  time_t t; uint16_t ms;
+  time_ms(&t, &ms);
+  uint32_t now = (uint32_t)(t * 1000 + ms);
+  if(now - s_last_tap_time < TAP_COOLDOWN_MS) return;
+  s_last_tap_time = now;
+
+  int tx = event->x, ty = event->y;
+
+  if(s_touch_direct) {
+    // ST_PLAY: tap play options (shield, bomb, bet)
+    if(s_state == ST_PLAY && g_play_opt_n > 0) {
+      for(int i = 0; i < g_play_opt_n; i++) {
+        if(point_in_rect(tx, ty, g_play_opt[i])) {
+          s_cursor = i;
+          select_click(NULL, NULL);
+          return;
+        }
+      }
+    }
+    // ST_BET pass/raise buttons
+    if(s_state == ST_BET && g_bet_btns_visible) {
+      if(point_in_rect(tx, ty, g_bet_pass)) {
+        s_cursor = 0;
+        select_click(NULL, NULL);
+        return;
+      }
+      if(point_in_rect(tx, ty, g_bet_raise)) {
+        s_cursor = 1;
+        select_click(NULL, NULL);
+        return;
+      }
+    }
+    // ST_REVEAL_PICK: tap player slot
+    if(s_state == ST_REVEAL_PICK && g_table_visible) {
+      for(int i = 0; i < g_table_slot_n; i++) {
+        if(point_in_rect(tx, ty, g_table_slot[i])) {
+          int ti = s_order[i];
+          if(!s_players[ti].eliminated && i != s_bettor_idx &&
+             s_players[ti].revealed < s_players[ti].stack_count) {
+            s_cursor = i;
+            select_click(NULL, NULL);
+            return;
+          }
+        }
+      }
+    }
+  }
+  // Fallthrough: any tap = select_click
+  select_click(NULL, NULL);
+}
+#endif
+
+// ============================================================================
+// APPMESSAGE (config settings)
+// ============================================================================
+static void inbox_received(DictionaryIterator *iter, void *context) {
+  (void)context;
+  Tuple *t = dict_find(iter, MESSAGE_KEY_TOUCH_MODE);
+  if(t) {
+    s_touch_direct = (int)t->value->int32 != 0;
+    persist_write_int(P_TOUCH_DIRECT, s_touch_direct ? 1 : 0);
+    if(s_canvas) layer_mark_dirty(s_canvas);
+  }
 }
 
 // ============================================================================
@@ -1124,16 +1232,26 @@ static void win_load(Window *w) {
   layer_set_update_proc(s_canvas, canvas_proc);
   layer_add_child(wl, s_canvas);
   window_set_click_config_provider(w, click_config);
+  #ifdef PBL_TOUCH
+  touch_service_subscribe(touch_handler, NULL);
+  window_set_touch_bridge_disabled(w, true);
+  #endif
 }
 
 static void win_unload(Window *w) {
+  #ifdef PBL_TOUCH
+  touch_service_unsubscribe();
+  #endif
   if(s_canvas) { layer_destroy(s_canvas); s_canvas = NULL; }
 }
 
 static void init(void) {
   srand(time(NULL));
+  if(persist_exists(P_TOUCH_DIRECT)) s_touch_direct = persist_read_int(P_TOUCH_DIRECT) != 0;
   s_icon_font_20 = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_ICON_FONT_20));
   s_icon_font_14 = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_ICON_FONT_14));
+  app_message_register_inbox_received(inbox_received);
+  app_message_open(64, 64);
   s_win = window_create();
   window_set_background_color(s_win, GColorBlack);
   window_set_window_handlers(s_win, (WindowHandlers){.load=win_load,.unload=win_unload});
