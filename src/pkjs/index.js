@@ -22,7 +22,7 @@ function saveSettings() {
 }
 
 Pebble.addEventListener('showConfiguration', function() {
-  var url = 'https://hobbykitjr.github.io/PebbleSkull/config/index.html' +
+  var url = 'https://hobbykitjr.github.io/PebbleSKULLCardGame/config/index.html' +
     '?touch=' + settings.touchMode;
   Pebble.openURL(url);
 });
