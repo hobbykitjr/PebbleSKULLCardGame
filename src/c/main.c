@@ -92,6 +92,7 @@ static bool  g_bet_btns_visible;
 static GRect g_table_slot[MAX_PLAYERS];
 static int   g_table_slot_n;
 static bool  g_table_visible;
+static int   g_picker_top, g_picker_bot;
 
 // ============================================================================
 // COLORS
@@ -417,6 +418,8 @@ static void canvas_proc(Layer *l, GContext *ctx) {
     #else
     graphics_context_set_fill_color(ctx, GColorDarkGray);
     #endif
+    g_picker_top = cy + 2;
+    g_picker_bot = cy + 2 + 30;
     graphics_fill_rect(ctx, GRect(40, cy+2, w-80, 30), 6, GCornersAll);
     graphics_context_set_text_color(ctx, GColorWhite);
     graphics_draw_text(ctx, opts[s_setup_cursor], f_lg,
@@ -853,8 +856,10 @@ static int play_option_to_action(int opt) {
   return 2; // bet
 }
 
-// Forward declaration
+// Forward declarations
 static void select_click(ClickRecognizerRef ref, void *ctx);
+static void up_click(ClickRecognizerRef ref, void *ctx);
+static void down_click(ClickRecognizerRef ref, void *ctx);
 
 // ============================================================================
 // TOUCH HANDLER
@@ -877,6 +882,12 @@ static void touch_handler(const TouchEvent *event, void *context) {
   int tx = event->x, ty = event->y;
 
   if(s_touch_direct) {
+    // ST_SETUP: tap above/below/on picker band
+    if(s_state == ST_SETUP) {
+      if(ty < g_picker_top) { up_click(NULL, NULL); return; }
+      if(ty > g_picker_bot) { down_click(NULL, NULL); return; }
+      select_click(NULL, NULL); return;
+    }
     // ST_PLAY: tap play options (shield, bomb, bet)
     if(s_state == ST_PLAY && g_play_opt_n > 0) {
       for(int i = 0; i < g_play_opt_n; i++) {
